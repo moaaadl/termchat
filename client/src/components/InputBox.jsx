@@ -114,6 +114,9 @@ const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) =>
         </Box>
       )}
       <Box borderStyle="round" borderColor="cyan" paddingX={1}>
+        <Text color="cyanBright" bold>
+          ❯{" "}
+        </Text>
         <TextInput
           value={value}
           onChange={handleChange}

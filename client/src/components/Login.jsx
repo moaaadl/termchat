@@ -14,17 +14,26 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <Box flexDirection="column">
-      <Text dimColor>Welcome to TermChat. Choose a username:</Text>
-      <TextInput
-        value={username}
-        onChange={setUsername}
-        onSubmit={handleSubmit}
-        placeholder="username"
-        focus
-      />
+    <Box flexDirection="column" alignItems="center">
+      <Box flexDirection="column" alignItems="center" marginTop={2} marginBottom={1}>
+        <Text bold color="cyanBright">
+          ● TermChat
+        </Text>
+        <Text dimColor>Welcome — pick a username to join #general</Text>
+      </Box>
+      <Box borderStyle="round" borderColor="cyan" paddingX={1}>
+        <TextInput
+          value={username}
+          onChange={setUsername}
+          onSubmit={handleSubmit}
+          placeholder="username"
+          focus
+        />
+      </Box>
       {!socket.connected && (
-        <Text color="yellow">Waiting for the server at localhost:4000...</Text>
+        <Text color="yellow" marginTop={1}>
+          Waiting for the server...
+        </Text>
       )}
     </Box>
   );

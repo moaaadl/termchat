@@ -19,6 +19,9 @@ export const registerChatHandlers = (io, socket) => {
         { upsert: true, new: true }
       );
 
+      // Broadcast the new online count to everyone (including the joiner).
+      await broadcastPresence(io);
+
       // Send the 20 most recent messages (oldest first) to the joining client.
       const messages = await Message.find().sort({ createdAt: -1 }).limit(20);
       socket.emit(
@@ -85,6 +88,18 @@ export const registerChatHandlers = (io, socket) => {
   socket.on("typing:start", handleTyping(true));
   socket.on("typing:stop", handleTyping(false));
 
+  // ---- users:list ----
+  // Send the requesting client the list of currently online usernames.
+  socket.on("users:list", async () => {
+    try {
+      const users = await User.find({ status: "online" }).select("username -_id");
+      socket.emit("users:list", { usernames: users.map((u) => u.username) });
+    } catch (error) {
+      console.error(`users:list error: ${error.message}`);
+      socket.emit("error", { message: "Failed to list users" });
+    }
+  });
+
   // ---- disconnect ----
   // Mark the user offline and notify the remaining clients.
   socket.on("disconnect", async () => {
@@ -97,8 +112,15 @@ export const registerChatHandlers = (io, socket) => {
       if (user) {
         socket.broadcast.emit("user:left", { username: user.username });
       }
+      await broadcastPresence(io);
     } catch (error) {
       console.error(`disconnect error: ${error.message}`);
     }
   });
 };
+
+// Broadcast the current count of online users to all connected clients.
+async function broadcastPresence(io) {
+  const online = await User.countDocuments({ status: "online" });
+  io.emit("presence:update", { online });
+}

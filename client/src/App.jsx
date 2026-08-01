@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text, useApp } from "ink";
-import { socket } from "./socket.js";
+import { socket, serverUrl } from "./socket.js";
 import Login from "./components/Login.jsx";
 import ChatScreen from "./components/ChatScreen.jsx";
 
@@ -31,7 +31,7 @@ const App = () => {
         TermChat
       </Text>
       {!username && !connected && (
-        <Text color="yellow">Connecting to server at localhost:4000...</Text>
+        <Text color="yellow">Connecting to server at {serverUrl}...</Text>
       )}
       {username ? (
         <ChatScreen username={username} onQuit={handleQuit} />
