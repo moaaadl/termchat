@@ -26,6 +26,11 @@ const userSchema = new mongoose.Schema(
       enum: ["online", "offline"],
       default: "online",
     },
+    unread: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
     createdAt: {
       type: Date,
       default: Date.now,

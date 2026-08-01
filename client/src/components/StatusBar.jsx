@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
 
-const StatusBar = ({ connected, online }) => {
+const StatusBar = ({ connected, online, roomName }) => {
   const { stdout } = useStdout();
   const width = stdout.columns || 80;
   return (
@@ -9,7 +9,7 @@ const StatusBar = ({ connected, online }) => {
       <Box justifyContent="space-between">
         <Box>
           <Text color={connected ? "green" : "red"}>● </Text>
-          <Text bold># general</Text>
+          <Text bold>{roomName}</Text>
         </Box>
         <Text dimColor>{online} online</Text>
       </Box>

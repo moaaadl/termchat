@@ -5,7 +5,16 @@ import { matchCommands } from "../commands.js";
 
 const TYPING_DEBOUNCE_MS = 1500;
 
-const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) => {
+const InputBox = ({
+  onSend,
+  onTypingStart,
+  onTypingStop,
+  onQuit,
+  onCommand,
+  active = true,
+  onFocusToggle,
+  placeholder = "Message #general",
+}) => {
   const [value, setValue] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const typingRef = useRef(false);
@@ -24,8 +33,16 @@ const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) =>
   const selected = Math.min(selectedIndex, Math.max(filtered.length - 1, 0));
 
   // Keyboard navigation for the command palette. TextInput ignores
-  // up/down/tab, so there is no conflict.
+  // up/down/tab, so there is no conflict. Tab switches focus to the sidebar
+  // when the palette is closed.
   useInput((input, key) => {
+    if (!active) {
+      return;
+    }
+    if (key.tab && !popupOpen) {
+      onFocusToggle?.();
+      return;
+    }
     if (!popupOpen) {
       return;
     }
@@ -127,8 +144,8 @@ const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) =>
           value={value}
           onChange={handleChange}
           onSubmit={handleSubmit}
-          placeholder="Message #general"
-          focus
+          placeholder={placeholder}
+          focus={active}
         />
       </Box>
     </Box>
