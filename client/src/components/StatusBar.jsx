@@ -9,17 +9,11 @@ const StatusBar = ({ connected, online }) => {
       <Box justifyContent="space-between">
         <Box>
           <Text color={connected ? "green" : "red"}>● </Text>
-          <Text bold color="cyanBright">
-            TermChat
-          </Text>
+          <Text bold># general</Text>
         </Box>
-        <Text dimColor>
-          {online} {online === 1 ? "user" : "users"} online
-        </Text>
+        <Text dimColor>{online} online</Text>
       </Box>
-      <Text color="gray">
-        {connected ? "─".repeat(width - 2) : "┄".repeat(width - 2)}
-      </Text>
+      <Text color="gray">{"─".repeat(width - 2)}</Text>
     </Box>
   );
 };

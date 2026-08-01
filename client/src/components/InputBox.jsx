@@ -54,6 +54,15 @@ const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) =>
   };
 
   const handleChange = (next) => {
+    // Ink keeps \r inside text chunks (paste support), so a fast-typed Enter
+    // arrives as part of the value. Treat it as Enter: submit the text before
+    // it and keep typing the remainder.
+    if (/[\r\n]/.test(next)) {
+      const index = next.search(/[\r\n]/);
+      handleSubmit(next.slice(0, index));
+      setValue(next.slice(index + 1));
+      return;
+    }
     setValue(next);
     setSelectedIndex(0);
     if (!next.trim()) {
@@ -93,7 +102,7 @@ const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) =>
   return (
     <Box flexDirection="column">
       {popupOpen && filtered.length > 0 && (
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" marginBottom={1}>
+        <Box flexDirection="column" marginBottom={1}>
           {filtered.map((command, i) => (
             <Text key={command.name}>
               {i === selected ? (
@@ -113,15 +122,12 @@ const InputBox = ({ onSend, onTypingStart, onTypingStop, onQuit, onCommand }) =>
           ))}
         </Box>
       )}
-      <Box borderStyle="round" borderColor="cyan" paddingX={1}>
-        <Text color="cyanBright" bold>
-          ❯{" "}
-        </Text>
+      <Box borderStyle="round" borderColor="gray" paddingX={1}>
         <TextInput
           value={value}
           onChange={handleChange}
           onSubmit={handleSubmit}
-          placeholder="Type a message..."
+          placeholder="Message #general"
           focus
         />
       </Box>

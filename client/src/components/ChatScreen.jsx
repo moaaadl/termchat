@@ -7,12 +7,13 @@ import MessageFeed from "./MessageFeed.jsx";
 import TypingIndicator from "./TypingIndicator.jsx";
 import InputBox from "./InputBox.jsx";
 
-const ChatScreen = ({ username, onQuit }) => {
+const ChatScreen = ({ username, password, onQuit }) => {
   const [entries, setEntries] = useState([]);
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [disconnected, setDisconnected] = useState(!socket.connected);
   const [online, setOnline] = useState(0);
   const idRef = useRef(0);
+  const authedRef = useRef(true);
 
   const nextId = () => ++idRef.current;
 
@@ -92,9 +93,25 @@ const ChatScreen = ({ username, onQuit }) => {
       ]);
     const onConnect = () => {
       setDisconnected(false);
+      if (authedRef.current) {
+        socket.emit("user:join", { username });
+      } else {
+        // Re-authenticate after a reconnect, then join.
+        socket.emit("auth:login", { username, password });
+      }
+    };
+    const onAuthSuccess = () => {
+      authedRef.current = true;
       socket.emit("user:join", { username });
     };
-    const onDisconnect = () => setDisconnected(true);
+    const onAuthError = (d) => {
+      authedRef.current = false;
+      pushSystem(`Re-login failed: ${d.message}`);
+    };
+    const onDisconnect = () => {
+      setDisconnected(true);
+      authedRef.current = false;
+    };
 
     socket.on("message:history", onHistory);
     socket.on("message:new", onNewMessage);
@@ -104,6 +121,8 @@ const ChatScreen = ({ username, onQuit }) => {
     socket.on("presence:update", onPresence);
     socket.on("users:list", onUsersList);
     socket.on("connect", onConnect);
+    socket.on("auth:success", onAuthSuccess);
+    socket.on("auth:error", onAuthError);
     socket.on("disconnect", onDisconnect);
 
     // Join after listeners are attached so the history reply is never missed.
@@ -118,9 +137,11 @@ const ChatScreen = ({ username, onQuit }) => {
       socket.off("presence:update", onPresence);
       socket.off("users:list", onUsersList);
       socket.off("connect", onConnect);
+      socket.off("auth:success", onAuthSuccess);
+      socket.off("auth:error", onAuthError);
       socket.off("disconnect", onDisconnect);
     };
-  }, [username]);
+  }, [username, password]);
 
   const handleSend = (text) => socket.emit("message:send", { username, text });
 

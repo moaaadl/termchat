@@ -1,11 +1,77 @@
-import User from "../models/User.js";
+import crypto from "node:crypto";
+import User, { hashPassword } from "../models/User.js";
 import Message from "../models/Message.js";
 
+// Usernames: 2-24 chars, letters/digits/underscore only.
+const USERNAME_RE = /^[a-zA-Z0-9_]{2,24}$/;
+
 export const registerChatHandlers = (io, socket) => {
+  // Socket ids that have authenticated via auth:login / auth:register.
+  // Only those may join the chat.
+  const authedSockets = new Set();
+
+  // ---- auth:register ----
+  socket.on("auth:register", async (data) => {
+    try {
+      const username = (data?.username || "").trim();
+      const password = data?.password || "";
+      if (!USERNAME_RE.test(username)) {
+        socket.emit("auth:error", {
+          message: "Username must be 2-24 characters (letters, numbers, _)",
+        });
+        return;
+      }
+      if (password.length < 4) {
+        socket.emit("auth:error", {
+          message: "Password must be at least 4 characters",
+        });
+        return;
+      }
+      if (await User.exists({ username })) {
+        socket.emit("auth:error", { message: "That username is already taken" });
+        return;
+      }
+      const salt = crypto.randomBytes(16).toString("hex");
+      await User.create({
+        username,
+        passwordHash: hashPassword(password, salt),
+        salt,
+        socketId: socket.id,
+      });
+      authedSockets.add(socket.id);
+      socket.emit("auth:success", { username });
+    } catch (error) {
+      console.error(`auth:register error: ${error.message}`);
+      socket.emit("auth:error", { message: "Failed to register" });
+    }
+  });
+
+  // ---- auth:login ----
+  socket.on("auth:login", async (data) => {
+    try {
+      const username = (data?.username || "").trim();
+      const password = data?.password || "";
+      const user = await User.findOne({ username });
+      if (!user || !user.verifyPassword(password)) {
+        socket.emit("auth:error", { message: "Invalid username or password" });
+        return;
+      }
+      authedSockets.add(socket.id);
+      socket.emit("auth:success", { username: user.username });
+    } catch (error) {
+      console.error(`auth:login error: ${error.message}`);
+      socket.emit("auth:error", { message: "Failed to login" });
+    }
+  });
+
   // ---- user:join ----
   // Register the user, mark them online, send message history, notify others.
   socket.on("user:join", async (data) => {
     try {
+      if (!authedSockets.has(socket.id)) {
+        socket.emit("error", { message: "Login or register first" });
+        return;
+      }
       const username = (data?.username || "").trim();
       if (!username) {
         socket.emit("error", { message: "Username is required" });
