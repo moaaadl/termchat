@@ -119,3 +119,11 @@ socket.on("message:new", (m) => console.log(`${m.username}: ${m.text}`));
 // send a message
 socket.emit("message:send", { username: "alice", text: "hello everyone" });
 ```
+
+## Deployment
+
+The backend is a single Node service and deploys as-is to Render (free tier, supports WebSockets). The repo ships with a `render.yaml` blueprint.
+
+1. **MongoDB Atlas** (free): create a cluster at atlas.mongodb.com → Database Access: create a user → Network Access: `0.0.0.0/0` → copy the `mongodb+srv://...` URI and append the db name: `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/termchat?retryWrites=true&w=majority`.
+2. **Render**: render.com → sign up with GitHub → "New" → "Blueprint" → pick the `termchat` repo → set the `MONGODB_URI` env var → deploy. The `PORT` env var is injected automatically.
+3. **Point the client at it**: `TERMCHAT_URL=https://<your-app>.onrender.com npm start` (client falls back to `localhost:4000` when unset).
