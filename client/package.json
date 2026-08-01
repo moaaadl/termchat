@@ -1,0 +1,18 @@
+{
+  "name": "termchat-client",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --import ./register.mjs index.js"
+  },
+  "dependencies": {
+    "ink": "^7.1.1",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.8",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}
