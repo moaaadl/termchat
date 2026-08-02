@@ -15,6 +15,15 @@ export const registerChatHandlers = (io, socket) => {
   // Whether this socket already announced its arrival (only once per session).
   const announced = { current: false };
 
+  const newToken = () => crypto.randomBytes(32).toString("hex");
+
+  // Constant-time comparison for session tokens.
+  const safeEqual = (a, b) => {
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+  };
+
   // ---- auth:register ----
   socket.on("auth:register", async (data) => {
     try {
@@ -40,6 +49,7 @@ export const registerChatHandlers = (io, socket) => {
       // Claim the username. If a placeholder doc exists (someone DM'd this
       // username before it was registered) it gets upgraded in place.
       const salt = crypto.randomBytes(16).toString("hex");
+      const token = newToken();
       await User.findOneAndUpdate(
         { username },
         {
@@ -47,12 +57,13 @@ export const registerChatHandlers = (io, socket) => {
             passwordHash: hashPassword(password, salt),
             salt,
             socketId: socket.id,
+            token,
           },
         },
         { upsert: true }
       );
       authedSockets.add(socket.id);
-      socket.emit("auth:success", { username });
+      socket.emit("auth:success", { username, token });
     } catch (error) {
       console.error(`auth:register error: ${error.message}`);
       socket.emit("auth:error", { message: "Failed to register" });
@@ -69,11 +80,45 @@ export const registerChatHandlers = (io, socket) => {
         socket.emit("auth:error", { message: "Invalid username or password" });
         return;
       }
+      const token = newToken();
+      await User.updateOne({ username }, { $set: { token, socketId: socket.id } });
       authedSockets.add(socket.id);
-      socket.emit("auth:success", { username: user.username });
+      socket.emit("auth:success", { username: user.username, token });
     } catch (error) {
       console.error(`auth:login error: ${error.message}`);
       socket.emit("auth:error", { message: "Failed to login" });
+    }
+  });
+
+  // ---- auth:token ----
+  // Resume a saved session: username + token stored on the client.
+  socket.on("auth:token", async (data) => {
+    try {
+      const username = (data?.username || "").trim();
+      const token = data?.token || "";
+      const user = await User.findOne({ username });
+      if (!user || !user.token || !safeEqual(user.token, token)) {
+        socket.emit("auth:error", { message: "Session expired — log in again" });
+        return;
+      }
+      authedSockets.add(socket.id);
+      socket.emit("auth:success", { username: user.username, token: user.token });
+    } catch (error) {
+      console.error(`auth:token error: ${error.message}`);
+      socket.emit("auth:error", { message: "Failed to resume session" });
+    }
+  });
+
+  // ---- auth:logout ----
+  // Invalidate the session token so it can't be reused.
+  socket.on("auth:logout", async (data) => {
+    try {
+      const username = (data?.username || "").trim();
+      const token = data?.token || "";
+      await User.updateOne({ username, token }, { $set: { token: null } });
+      authedSockets.delete(socket.id);
+    } catch (error) {
+      console.error(`auth:logout error: ${error.message}`);
     }
   });
 

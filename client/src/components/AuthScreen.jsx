@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { socket } from "../socket.js";
+import { readSession, writeSession, clearSession } from "../session.js";
 
 const AuthScreen = ({ onLogin }) => {
   const [mode, setMode] = useState("login");
@@ -12,8 +13,22 @@ const AuthScreen = ({ onLogin }) => {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const onSuccess = (d) => onLogin({ username: d.username, password });
+    // If we have a saved session, skip the form and resume it.
+    const saved = readSession();
+    if (saved) {
+      setBusy(true);
+      socket.emit("auth:token", {
+        username: saved.username,
+        token: saved.token,
+      });
+    }
+
+    const onSuccess = (d) => {
+      writeSession({ username: d.username, token: d.token });
+      onLogin({ username: d.username, password, token: d.token });
+    };
     const onError = (d) => {
+      clearSession();
       setError(d.message);
       setBusy(false);
     };
@@ -95,7 +110,7 @@ const AuthScreen = ({ onLogin }) => {
           <TextInput
             value={password}
             onChange={handlePasswordChange}
-            onSubmit={submit}
+            onSubmit={() => submit()}
             focus={focus === "password"}
             mask="•"
             placeholder="••••••••"

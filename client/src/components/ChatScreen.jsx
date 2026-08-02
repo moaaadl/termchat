@@ -14,7 +14,7 @@ export const peerOf = (room, username) =>
     ? "general"
     : room.slice(3).split("_").find((u) => u !== username) ?? room;
 
-const ChatScreen = ({ username, password, onQuit }) => {
+const ChatScreen = ({ username, password, onQuit, onLogout }) => {
   const [rooms, setRooms] = useState([
     { id: "general", type: "channel", name: "general", unread: 0 },
   ]);
@@ -50,6 +50,8 @@ const ChatScreen = ({ username, password, onQuit }) => {
       } else {
         switchRoom(dmRoomId(username, target));
       }
+    } else if (name === "/logout") {
+      onLogout();
     } else if (name === "/q") {
       onQuit();
     } else if (name === "unknown") {

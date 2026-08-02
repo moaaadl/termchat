@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
       of: Number,
       default: {},
     },
+    // Session token: set on login/register, cleared on logout or re-login.
+    token: {
+      type: String,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
