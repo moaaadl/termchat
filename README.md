@@ -173,4 +173,5 @@ All payloads are trimmed; invalid input replies with `error: { message }`.
 ## Docs
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — file-by-file explanation of the whole codebase (start here to learn how it all works)
+- **[CHALLENGES.md](CHALLENGES.md)** — a ladder of coding challenges (beginner → hard) to practice on this codebase
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — step-by-step Atlas + Render deployment
