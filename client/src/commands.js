@@ -1,6 +1,6 @@
 export const COMMANDS = [
   { name: "/help", description: "Show available commands" },
-  { name: "/users", description: "Show who is online" },
+  { name: "/dm", description: "Open a private chat: /dm <username>" },
   { name: "/q", description: "Quit TermChat" },
 ];
 

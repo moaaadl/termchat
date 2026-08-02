@@ -10,7 +10,7 @@ const formatTime = (ts) =>
 const MessageFeed = ({ entries }) => (
   <Box flexDirection="column" flexGrow={1} overflow="hidden">
     {entries.slice(-MAX_VISIBLE).map((entry) =>
-      entry.kind === "system" || entry.kind === "fetching" ? (
+      entry.kind === "system" ? (
         <Text key={entry.id} dimColor italic>
           {entry.text}
         </Text>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
-import { matchCommands } from "../commands.js";
+import { COMMANDS, matchCommands } from "../commands.js";
 
 const TYPING_DEBOUNCE_MS = 1500;
 
@@ -99,9 +99,13 @@ const InputBox = ({
   const handleSubmit = (text) => {
     const trimmed = text.trim();
     if (trimmed.startsWith("/")) {
-      const matches = matchCommands(trimmed);
-      if (matches.length > 0) {
-        onCommand(matches[0].name);
+      const match = COMMANDS.find(
+        (c) =>
+          trimmed.toLowerCase() === c.name.toLowerCase() ||
+          trimmed.toLowerCase().startsWith(c.name.toLowerCase() + " ")
+      );
+      if (match) {
+        onCommand(match.name, trimmed);
         setValue("");
         return;
       }

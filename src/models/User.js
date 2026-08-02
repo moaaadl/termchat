@@ -9,17 +9,16 @@ const userSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    // Placeholder users (created when someone DMs an unregistered username)
+    // have no passwordHash/salt yet; they are claimed on first registration.
     passwordHash: {
       type: String,
-      required: true,
     },
     salt: {
       type: String,
-      required: true,
     },
     socketId: {
       type: String,
-      required: true,
     },
     status: {
       type: String,

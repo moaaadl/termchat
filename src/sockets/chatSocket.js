@@ -32,17 +32,25 @@ export const registerChatHandlers = (io, socket) => {
         });
         return;
       }
-      if (await User.exists({ username })) {
+      const existing = await User.findOne({ username });
+      if (existing && existing.passwordHash) {
         socket.emit("auth:error", { message: "That username is already taken" });
         return;
       }
+      // Claim the username. If a placeholder doc exists (someone DM'd this
+      // username before it was registered) it gets upgraded in place.
       const salt = crypto.randomBytes(16).toString("hex");
-      await User.create({
-        username,
-        passwordHash: hashPassword(password, salt),
-        salt,
-        socketId: socket.id,
-      });
+      await User.findOneAndUpdate(
+        { username },
+        {
+          $set: {
+            passwordHash: hashPassword(password, salt),
+            salt,
+            socketId: socket.id,
+          },
+        },
+        { upsert: true }
+      );
       authedSockets.add(socket.id);
       socket.emit("auth:success", { username });
     } catch (error) {
@@ -57,7 +65,7 @@ export const registerChatHandlers = (io, socket) => {
       const username = (data?.username || "").trim();
       const password = data?.password || "";
       const user = await User.findOne({ username });
-      if (!user || !user.verifyPassword(password)) {
+      if (!user || !user.passwordHash || !user.verifyPassword(password)) {
         socket.emit("auth:error", { message: "Invalid username or password" });
         return;
       }
@@ -180,17 +188,29 @@ export const registerChatHandlers = (io, socket) => {
       // general), and notify online users who are not viewing this room.
       let affectedUsernames;
       if (room.startsWith("dm:")) {
-        affectedUsernames = room.slice(3).split("_").filter((u) => u !== username);
+        affectedUsernames = room
+          .slice(3)
+          .split("_")
+          .filter((u) => u !== username);
+        // Upsert each peer so DMs to unregistered usernames still count as
+        // unread once they register.
+        for (const peer of affectedUsernames) {
+          await User.updateOne(
+            { username: peer },
+            { $inc: { [`unread.${room}`]: 1 } },
+            { upsert: true }
+          );
+        }
       } else {
         affectedUsernames = await User.find({ username: { $ne: username } })
           .select("username -_id")
           .then((us) => us.map((u) => u.username));
-      }
-      if (affectedUsernames.length > 0) {
-        await User.updateMany(
-          { username: { $in: affectedUsernames } },
-          { $inc: { [`unread.${room}`]: 1 } }
-        );
+        if (affectedUsernames.length > 0) {
+          await User.updateMany(
+            { username: { $in: affectedUsernames } },
+            { $inc: { [`unread.${room}`]: 1 } }
+          );
+        }
       }
       const others = await User.find({ username: { $in: affectedUsernames } }).select(
         "username socketId unread"

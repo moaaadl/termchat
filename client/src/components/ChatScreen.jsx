@@ -21,8 +21,6 @@ const ChatScreen = ({ username, password, onQuit }) => {
   const [currentRoom, setCurrentRoom] = useState("general");
   const [entries, setEntries] = useState([]);
   const [typingUsers, setTypingUsers] = useState(new Set());
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const [online, setOnline] = useState(0);
   const [disconnected, setDisconnected] = useState(!socket.connected);
   const [sidebarFocused, setSidebarFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -43,9 +41,15 @@ const ChatScreen = ({ username, password, onQuit }) => {
         ...COMMANDS.map((c) => `  ${c.name}  ${c.description}`),
       ];
       pushSystem(lines.join("\n"));
-    } else if (name === "/users") {
-      pushSystem("Fetching online users...", "fetching");
-      socket.emit("users:list");
+    } else if (name === "/dm") {
+      const target = raw.slice("/dm".length).trim();
+      if (!target) {
+        pushSystem("Usage: /dm <username>");
+      } else if (target.toLowerCase() === username.toLowerCase()) {
+        pushSystem("That is you. Pick someone else.");
+      } else {
+        switchRoom(dmRoomId(username, target));
+      }
     } else if (name === "/q") {
       onQuit();
     } else if (name === "unknown") {
@@ -107,22 +111,12 @@ const ChatScreen = ({ username, password, onQuit }) => {
         },
       ]);
     };
-    const onUserJoined = (d) => {
-      setOnlineUsers((prev) => (prev.includes(d.username) ? prev : [...prev, d.username]));
-      if (currentRoomRef.current === "general") {
-        pushSystem(`* ${d.username} joined the chat *`);
-      }
-    };
     const onUserLeft = (d) => {
-      setOnlineUsers((prev) => prev.filter((u) => u !== d.username));
       setTypingUsers((prev) => {
         const next = new Set(prev);
         next.delete(d.username);
         return next;
       });
-      if (currentRoomRef.current === "general") {
-        pushSystem(`* ${d.username} left the chat *`);
-      }
     };
     const onTypingUpdate = (d) => {
       if (d.room !== currentRoomRef.current) {
@@ -138,7 +132,6 @@ const ChatScreen = ({ username, password, onQuit }) => {
         return next;
       });
     };
-    const onPresence = (d) => setOnline(d.online);
     const onRoomsList = (d) => setRooms(d.rooms);
     const onUnreadUpdate = (d) =>
       setRooms((prev) => {
@@ -161,25 +154,6 @@ const ChatScreen = ({ username, password, onQuit }) => {
           },
         ];
       });
-    const onUsersList = (d) => {
-      setOnlineUsers(d.usernames.filter((u) => u !== username));
-      setEntries((prev) => {
-        if (!prev.some((e) => e.kind === "fetching")) {
-          return prev;
-        }
-        return [
-          ...prev.filter((e) => e.kind !== "fetching"),
-          {
-            id: nextId(),
-            kind: "system",
-            text:
-              d.usernames.length === 0
-                ? "No one else is online right now."
-                : `Online: ${d.usernames.join(", ")}`,
-          },
-        ];
-      });
-    };
     const onConnect = () => {
       setDisconnected(false);
       if (authedRef.current) {
@@ -203,13 +177,10 @@ const ChatScreen = ({ username, password, onQuit }) => {
 
     socket.on("message:history", onHistory);
     socket.on("message:new", onNewMessage);
-    socket.on("user:joined", onUserJoined);
     socket.on("user:left", onUserLeft);
     socket.on("typing:update", onTypingUpdate);
-    socket.on("presence:update", onPresence);
     socket.on("rooms:list", onRoomsList);
     socket.on("unread:update", onUnreadUpdate);
-    socket.on("users:list", onUsersList);
     socket.on("connect", onConnect);
     socket.on("auth:success", onAuthSuccess);
     socket.on("auth:error", onAuthError);
@@ -217,18 +188,14 @@ const ChatScreen = ({ username, password, onQuit }) => {
 
     // Join after listeners are attached so the history reply is never missed.
     socket.emit("user:join", { username, room: "general" });
-    socket.emit("users:list");
 
     return () => {
       socket.off("message:history", onHistory);
       socket.off("message:new", onNewMessage);
-      socket.off("user:joined", onUserJoined);
       socket.off("user:left", onUserLeft);
       socket.off("typing:update", onTypingUpdate);
-      socket.off("presence:update", onPresence);
       socket.off("rooms:list", onRoomsList);
       socket.off("unread:update", onUnreadUpdate);
-      socket.off("users:list", onUsersList);
       socket.off("connect", onConnect);
       socket.off("auth:success", onAuthSuccess);
       socket.off("auth:error", onAuthError);
@@ -241,14 +208,8 @@ const ChatScreen = ({ username, password, onQuit }) => {
     for (const r of rooms) {
       list.push({ id: r.id, type: r.type, name: r.name, unread: r.unread });
     }
-    for (const u of onlineUsers) {
-      const id = dmRoomId(username, u);
-      if (!list.some((i) => i.id === id)) {
-        list.push({ id, type: "dm", name: u, unread: 0 });
-      }
-    }
     return list;
-  }, [rooms, onlineUsers, username]);
+  }, [rooms]);
 
   const clampedSelected = Math.min(selectedIndex, Math.max(items.length - 1, 0));
 
@@ -279,11 +240,7 @@ const ChatScreen = ({ username, password, onQuit }) => {
           onFocusInput={() => setSidebarFocused(false)}
         />
         <Box flexDirection="column" flexGrow={1}>
-          <StatusBar
-            connected={!disconnected}
-            online={online}
-            roomName={roomName}
-          />
+          <StatusBar connected={!disconnected} roomName={roomName} />
           <MessageFeed entries={entries} />
           <TypingIndicator users={[...typingUsers]} />
           {disconnected && (
