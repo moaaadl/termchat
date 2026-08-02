@@ -77,6 +77,18 @@ termchat --server https://termchat.onrender.com
 TERMCHAT_URL=https://termchat.onrender.com npm start
 ```
 
+### Sessions survive redeploys
+
+Login tokens live in MongoDB (in the `users` collection), not on the server process — so redeploying or restarting Render doesn't log anyone out. The client stores the token locally in `~/.termchat/session.json`; it re-authenticates on launch with `auth:token`. `/logout` invalidates the token server-side.
+
+One active session per account: logging in on a new machine rotates the token, which revokes the previous machine's session (it'll show "Session expired — log in again" on next action).
+
+---
+
+## Resetting data
+
+`npm run freshdb` (run in the repo root) drops the **entire** database — users, messages, unread counts. It refuses to run against anything that isn't a `localhost` URI unless you pass `-- --yes` (so you can't accidentally wipe the Atlas database from a local checkout).
+
 ---
 
 ## Troubleshooting

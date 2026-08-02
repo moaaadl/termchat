@@ -1,113 +1,102 @@
 # TermChat Client
 
-The terminal UI for TermChat. A chat client built with **ink** (React for terminals), **ink-text-input**, and **socket.io-client**. It talks to the TermChat backend (Socket.io server + MongoDB, see `../README.md`) on `http://localhost:4000`.
+The terminal UI for TermChat — a chat client built with **ink** (React for terminals), **ink-text-input**, and **socket.io-client**. It talks to the TermChat backend (see `../README.md`) over WebSockets; it never touches the database directly.
 
 ## Quick start
 
 ```bash
-# 1. Backend (in termchat/ root)
+# 1. Backend (repo root)
 mongostart
-npm run dev          # server on http://localhost:4000
+npm run dev            # server on http://localhost:4000
 
 # 2. This client (in client/)
 npm install
-npm start
+npm link               # creates the global `termchat` command
+npm start              # or just: termchat
 ```
 
-Open `npm start` in two terminals, pick two usernames, chat. Type `/q` to quit.
+Point it at a remote server: `termchat --server https://termchat.onrender.com`, or `TERMCHAT_URL=... npm start`.
 
 ## How it runs (no build step)
 
-Node cannot run JSX natively, so `npm start` runs:
+Node cannot run JSX natively, so the client uses a custom ESM loader:
 
 ```
-node --import ./register.mjs index.js
+termchat  →  bin/termchat.js   (registers loader, parses --server)
+npm start →  node --import ./register.mjs index.js
 ```
 
-- `register.mjs` — registers a custom ESM loader (`node:module.register`)
-- `jsx-loader.mjs` — the loader: when Node imports a `.jsx` file, it reads the file, transforms it with **esbuild** (`loader: "jsx"`, automatic runtime), and returns plain ESM. Everything else (`.js`, `.mjs`) goes through Node normally.
+- `register.mjs` — `node:module.register("./jsx-loader.mjs")`
+- `jsx-loader.mjs` — for any `.jsx` import: read file → esbuild transform (`loader: "jsx"`, automatic runtime) → plain ESM.
 
-Net effect: you write normal JSX components and `node index.js` just works — no bundler, no build step, source files are the live code.
+Net effect: source files are the live code. Edit a `.jsx`, relaunch `termchat`, done.
 
-## Architecture
+## What's inside
 
-```
-┌─────────────┐  Socket.io (WebSocket)  ┌─────────────────────────┐
-│   Client    │ ───────────────────────► │        Backend          │
-│  (ink UI)   │                          │  Express + Socket.io    │
-└─────────────┘                          │  + MongoDB (Mongoose)   │
-                                         └─────────────────────────┘
-```
+| File | What it does |
+| ---- | ------------ |
+| `bin/termchat.js` | Global CLI entry (`--server <url>` → `TERMCHAT_URL`) |
+| `index.js` | Clear screen, render `<App/>`, exit on stdin EOF |
+| `register.mjs` / `jsx-loader.mjs` | The JSX loader |
+| `src/socket.js` | The **single** shared socket.io-client instance |
+| `src/session.js` | Read/write/clear `~/.termchat/session.json` (remember me) |
+| `src/App.jsx` | AuthScreen ↔ ChatScreen switch; quit & logout handlers |
+| `src/commands.js` | `/help`, `/dm`, `/logout`, `/q` + matching |
+| `src/components/AuthScreen.jsx` | Login/register form, session resume, masked password |
+| `src/components/ChatScreen.jsx` | Hub: rooms, unread, room switching, all socket listeners |
+| `src/components/Sidebar.jsx` | Channels + DMs with `(n)` unread badges, keyboard nav |
+| `src/components/StatusBar.jsx` | `● # general` + separator line |
+| `src/components/MessageFeed.jsx` | Last 20 messages, `HH:MM name text`, colored usernames |
+| `src/components/TypingIndicator.jsx` | Animated "X is typing..." (reserved line, no layout jump) |
+| `src/components/InputBox.jsx` | Text input, command palette, typing debounce |
+| `src/utils/colorFromUsername.js` | Hash → stable color per username |
 
-```
-client/
-├── index.js              # Entry: render(<App />) via createElement (plain JS, no JSX)
-├── register.mjs          # Registers the JSX loader
-├── jsx-loader.mjs        # esbuild JSX -> ESM transform
-└── src/
-    ├── socket.js         # The single socket.io-client instance (shared everywhere)
-    ├── App.jsx           # Top-level: banner, Login <-> ChatScreen switch, /q handler
-    ├── components/
-    │   ├── Login.jsx     # Username prompt screen
-    │   ├── ChatScreen.jsx# Hub: socket listeners + feed state + layout
-    │   ├── MessageFeed.jsx      # Renders last 20 messages, colored usernames
-    │   ├── TypingIndicator.jsx  # Reserved 1-line "X is typing..."
-    │   └── InputBox.jsx  # Text input, typing debounce, send, /q
-    └── utils/
-        └── colorFromUsername.js  # Hash username -> stable color from palette
-```
+## Keys & commands
 
-## Data flow
+| Key | Action |
+| --- | ------ |
+| `Tab` | Input ↔ sidebar |
+| `↑` / `↓` | Navigate sidebar / command palette |
+| `Enter` | Open room or send message |
+| `Esc` | Close palette / back to input |
 
-### Login → Chat
+| Command | Action |
+| ------- | ------ |
+| `/dm <user>` | Open a private chat |
+| `/help` | List commands |
+| `/logout` | Forget this session (token invalidated server-side) |
+| `/q` | Quit |
 
-1. `App` renders the banner + `Login`. User types a username, hits Enter.
-2. `App` sets `username` state → `Login` unmounts, `ChatScreen` mounts.
-3. `ChatScreen` mounts, its `useEffect` runs **in order**: attach all socket listeners FIRST, then `socket.emit("user:join", { username })`. (Order matters — the join reply `message:history` must never beat the listeners.)
-4. Server upserts the user, replies with the last 20 messages → `message:history` handler replaces the feed.
+## How sessions work
 
-### Sending a message
+On login/register the server returns a token; the client saves `{ username, token }` to `~/.termchat/session.json`. On launch it tries `auth:token` first — if valid, you skip the login screen. `/logout` deletes the file and nulls the token server-side.
 
-1. `InputBox` submit → `onSend(text)` prop → `ChatScreen.handleSend` → `socket.emit("message:send", { username, text })`.
-2. Server persists + broadcasts `message:new` to **everyone** (including sender) → feed appends it.
+## Data flow in five steps
 
-### Typing indicator (debounced)
-
-- First keystroke in `InputBox` → `typing:start` emitted once.
-- Further keystrokes reset a 1.5s timer; if it fires, `typing:stop` is emitted.
-- On send (Enter), `typing:stop` is emitted immediately.
-- Incoming `typing:update` events add/remove the username from a `Set` → `TypingIndicator` shows "X is typing..." (or an empty reserved line so the layout never jumps).
-
-### Presence
-
-- Someone joins → `user:joined` → dim italic `* username joined the chat *` line.
-- Someone disconnects → `user:left` → same, and they're removed from the typing set.
-
-### Disconnects
-
-- The backend heartbeat is tight (`pingInterval: 5s`, `pingTimeout: 3s` in the server's `index.js`) so a dead server is noticed in ~8s.
-- `disconnect` → yellow banner "Disconnected from server... waiting for reconnect". No crash.
-- On auto-reconnect (`connect` fires again), `ChatScreen` re-emits `user:join` → server upserts user and re-sends history, replacing the feed.
-
-### Quit (`/q`)
-
-- Typing `/q` in the input box → `onQuit` → `App.handleQuit`: `socket.close()` + `useApp().exit()` (ink's graceful unmount restores the terminal). Ctrl+C also works.
+1. **Auth** — `auth:register` / `auth:login` / `auth:token` → `auth:success` → session saved → App shows ChatScreen.
+2. **Join** — ChatScreen attaches listeners **first**, then emits `user:join { room }`. Server replies `message:history` + `rooms:list`.
+3. **Send** — InputBox → `message:send` → server persists and echoes `message:new` to the whole room; the feed appends it.
+4. **DMs & unread** — `/dm bob` → join `dm:alice_bob`; incoming messages bump bob's unread on the server; the sidebar badge updates via `unread:update` / `rooms:list`.
+5. **Reconnect** — heartbeat drops in ~8s → yellow banner → socket.io auto-reconnects → re-auth + re-join → history re-sent, feed self-heals.
 
 ## Socket events used
 
-| Direction | Event | Payload | Purpose |
-| --------- | ----- | ------- | ------- |
-| → server | `user:join` | `{ username }` | Register + get history |
-| → server | `message:send` | `{ username, text }` | Send a message |
-| → server | `typing:start` / `typing:stop` | `{ username }` | Typing indicator |
-| ← server | `message:history` | `[{ username, text, timestamp }]` | Last 20, on join |
-| ← server | `message:new` | `{ username, text, timestamp }` | New message (all clients) |
-| ← server | `user:joined` / `user:left` | `{ username }` | Presence |
-| ← server | `typing:update` | `{ username, isTyping }` | Typing indicator |
+| Direction | Event | Payload |
+| --------- | ----- | ------- |
+| → | `auth:register` / `auth:login` / `auth:token` / `auth:logout` | `{username, ...}` |
+| → | `user:join` / `user:leave` | `{ username, room }` |
+| → | `message:send` | `{ username, text, room }` |
+| → | `typing:start` / `typing:stop` | `{ username, room }` |
+| ← | `auth:success` / `auth:error` | `{ username, token }` / `{ message }` |
+| ← | `message:history` / `message:new` | messages (last 20) / single message |
+| ← | `rooms:list` / `unread:update` | sidebar state / badge update |
+| ← | `typing:update` | `{ username, room, isTyping }` |
 
 ## Gotchas (learned the hard way)
 
-- **Keystrokes vs chunks**: ink receives stdin chunks; if a whole line arrives in one chunk it's treated as one paste event and Enter is missed. Real terminals send per-keystroke, so this only bites automated tests — in tests, send each char with a small delay, ending with `\r` (not `\n`).
-- **`process.stdin.on("end")`** in `index.js` exists so piped-input tests exit; harmless in interactive use.
-- **`index.js` uses `createElement`**, not JSX — it's a `.js` file the loader skips.
-- **Never import the socket differently** in components — always `import { socket } from "../socket.js"` so all components share one connection.
+- **Enter-in-chunk**: ink keeps `\r` inside text chunks (paste support), so fast-typed Enter is *text*. `AuthScreen` and `InputBox` split on `[\r\n]`; automated tests must send input slowly with a trailing `\r`.
+- **`onSubmit(value)`**: ink-text-input passes the current value to `onSubmit`. Don't write `onSubmit={fn}` where `fn` has default params — it silently swallows the value (this once registered accounts *under their own password*).
+- **One socket**: always `import { socket } from "../socket.js"` — never create a second connection.
+- **Listeners before emits**: ChatScreen attaches socket listeners before emitting `user:join`, or the history reply gets lost.
+
+For the full file-by-file explanation, see **[ARCHITECTURE.md](../ARCHITECTURE.md)**.
