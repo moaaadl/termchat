@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "freshdb": "node scripts/freshdb.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
