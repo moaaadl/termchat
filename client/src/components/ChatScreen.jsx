@@ -12,7 +12,10 @@ export const dmRoomId = (a, b) => `dm:${[a, b].sort().join("_")}`;
 export const peerOf = (room, username) =>
   room === "general"
     ? "general"
-    : room.slice(3).split("_").find((u) => u !== username) ?? room;
+    : (room
+        .slice(3)
+        .split("_")
+        .find((u) => u !== username) ?? room);
 
 const ChatScreen = ({ username, password, onQuit, onLogout }) => {
   const [rooms, setRooms] = useState([
@@ -56,7 +59,13 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
       onQuit();
     } else if (name === "unknown") {
       pushSystem(`Unknown command: ${raw}. Type /help for available commands.`);
+    } else if (name === "/clean") {
+      onClear();
     }
+  };
+
+  const onClear = () => {
+    setEntries([]);
   };
 
   const switchRoom = (room) => {
@@ -79,7 +88,7 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
               name: peerOf(room, username),
               unread: 0,
             },
-          ]
+          ],
     );
   };
 
@@ -95,7 +104,7 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
           username: m.username,
           text: m.text,
           timestamp: m.timestamp,
-        }))
+        })),
       );
     };
     const onNewMessage = (m) => {
@@ -140,7 +149,7 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
         const existing = prev.find((r) => r.id === d.room);
         if (existing) {
           return prev.map((r) =>
-            r.id === d.room ? { ...r, unread: d.unread } : r
+            r.id === d.room ? { ...r, unread: d.unread } : r,
           );
         }
         if (d.unread <= 0) {
@@ -213,7 +222,10 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
     return list;
   }, [rooms]);
 
-  const clampedSelected = Math.min(selectedIndex, Math.max(items.length - 1, 0));
+  const clampedSelected = Math.min(
+    selectedIndex,
+    Math.max(items.length - 1, 0),
+  );
 
   const handleSend = (text) =>
     socket.emit("message:send", {
@@ -223,7 +235,9 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
     });
 
   const roomName =
-    currentRoom === "general" ? "# general" : `@ ${peerOf(currentRoom, username)}`;
+    currentRoom === "general"
+      ? "# general"
+      : `@ ${peerOf(currentRoom, username)}`;
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -234,7 +248,7 @@ const ChatScreen = ({ username, password, onQuit, onLogout }) => {
           selectedIndex={clampedSelected}
           onNavigate={(delta) =>
             setSelectedIndex((i) =>
-              Math.max(0, Math.min(i + delta, items.length - 1))
+              Math.max(0, Math.min(i + delta, items.length - 1)),
             )
           }
           onOpen={(id) => switchRoom(id)}
